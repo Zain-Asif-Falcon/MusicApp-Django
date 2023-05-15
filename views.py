@@ -117,54 +117,7 @@ class VerifyTokenView(APIView):
             return Response({"detail": "OTP expired or invalid"}, status=400)
 
 
-class SyncUsers(APIView):
-    permission_classes = [IsAuthenticated]
-    parser_classes = [parsers.MultiPartParser]
 
-    @swagger_auto_schema(request_body=MigrationSerializer)
-    def post(self, request, *args, **kwargs):
-        # response = requests.get("https://www.hiphopmyway.com/wp-json/wp/v2/artistspublished")
-        # print(response)
-        count = 0
-        serializer = MigrationSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        r = serializer.validated_data["file"]
-        data_set = r.read().decode('UTF-8')
-        io_string = io.StringIO(data_set)
-        for data in json.load(io_string):
-            try:
-                first_name, last_name = self.get_names(data["fullName"])
-            except:
-                print("NO name found!!")
-                continue
-            try:
-                print(f"Syncing {first_name, last_name}")
-                user = User(user_type="artist", email=data["email"], first_name=first_name, last_name=last_name)
-                user.set_unusable_password()
-                user.save()
-            except IntegrityError as e:
-                print(f"skipping {data['email']}")
-                continue
-
-            profile, created = Profile.objects.get_or_create(user=user)
-            profile.stage_name = data["title"]
-            if data["profileImage"]:
-                self.get_remote_image(profile, data["profileImage"][0])
-            socials = data['socialLinks'][0]
-            for link in socials:
-                if link['_cpxi_artist_social_name'] == "Inatagram" and link['_cpxi_artist_social_website']:
-                    profile.instagram_link = link['_cpxi_artist_social_website']
-
-            count += 1
-
-        return Response({"detail": f"{count} profiles synced "})
-
-    def get_remote_image(self, profile, url):
-        img_temp = NamedTemporaryFile(delete=True)
-        img_temp.write(requests.get(url).content)
-        img_temp.flush()
-        profile.profile_picture.save(f"image_{profile.user}", File(img_temp))
 
     def get_names(self, names):
         if len(names) == 1:
